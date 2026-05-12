@@ -197,7 +197,7 @@ st.subheader("💰 가상화폐 모의투자")
 
 # 초기값 설정
 if "cash" not in st.session_state:
-    st.session_state.cash = 10_000_000   # 초기 자금 1천만 원
+    st.session_state.cash = 100_000_000   # 초기 자금 1천만 원
 
 if "holdings" not in st.session_state:
     st.session_state.holdings = {}
@@ -213,7 +213,7 @@ coin_value = coin_amount * current_price
 total_asset = st.session_state.cash + coin_value
 
 # 수익/손실 계산
-initial_cash = 10_000_000
+initial_cash = 100_000_000
 profit_loss = total_asset - initial_cash
 profit_rate = (profit_loss / initial_cash) * 100
 
@@ -321,7 +321,7 @@ else:
 
 # 초기화 버튼
 if st.button("모의투자 초기화"):
-    st.session_state.cash = 10_000_000
+    st.session_state.cash = 100_000_000
     st.session_state.holdings = {}
     st.session_state.trade_history = []
     st.success("모의투자 데이터가 초기화되었습니다.")
