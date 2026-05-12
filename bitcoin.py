@@ -6,6 +6,8 @@ from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 from streamlit_autorefresh import st_autorefresh
 import requests
+import json
+import os
 
 # -----------------------------
 # 1. 페이지 설정 및 자동 새로고침
@@ -195,15 +197,38 @@ with st.expander("📄 상세 데이터 확인 (최근 5개 봉)"):
 st.markdown("---")
 st.subheader("💰 가상화폐 모의투자")
 
+SAVE_FILE = "mock_trading_data.json"
+INITIAL_CASH = 100_000_000
+
+# 저장된 모의투자 데이터 불러오기
+def load_mock_data():
+    if os.path.exists(SAVE_FILE):
+        with open(SAVE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    return {
+        "cash": INITIAL_CASH,
+        "holdings": {},
+        "trade_history": []
+    }
+
+# 모의투자 데이터 저장하기
+def save_mock_data():
+    data = {
+        "cash": st.session_state.cash,
+        "holdings": st.session_state.holdings,
+        "trade_history": st.session_state.trade_history
+    }
+
+    with open(SAVE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
 # 초기값 설정
 if "cash" not in st.session_state:
-    st.session_state.cash = 100_000_000   # 초기 자금 1천만 원
-
-if "holdings" not in st.session_state:
-    st.session_state.holdings = {}
-
-if "trade_history" not in st.session_state:
-    st.session_state.trade_history = []
+    data = load_mock_data()
+    st.session_state.cash = data["cash"]
+    st.session_state.holdings = data["holdings"]
+    st.session_state.trade_history = data["trade_history"]
 
 # 현재 선택 코인 보유 수량
 coin_amount = st.session_state.holdings.get(ticker, 0)
@@ -213,9 +238,8 @@ coin_value = coin_amount * current_price
 total_asset = st.session_state.cash + coin_value
 
 # 수익/손실 계산
-initial_cash = 100_000_000
-profit_loss = total_asset - initial_cash
-profit_rate = (profit_loss / initial_cash) * 100
+profit_loss = total_asset - INITIAL_CASH
+profit_rate = (profit_loss / INITIAL_CASH) * 100
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -238,6 +262,7 @@ with col4:
         f"{profit_rate:.2f}%",
         f"{profit_loss:,.0f} 원"
     )
+
 st.markdown("### 🛒 매수 / 매도")
 
 col_buy, col_sell = st.columns(2)
@@ -274,7 +299,9 @@ with col_buy:
                 "수량": buy_amount
             })
 
+            save_mock_data()
             st.success(f"{selected_korean_name} {buy_amount:.6f}개 매수 완료")
+            st.rerun()
 
 # 매도
 with col_sell:
@@ -308,7 +335,9 @@ with col_sell:
                 "수량": sell_amount
             })
 
+            save_mock_data()
             st.success(f"{selected_korean_name} {sell_amount:.6f}개 매도 완료")
+            st.rerun()
 
 # 거래 내역
 st.markdown("### 📄 거래 내역")
@@ -321,7 +350,9 @@ else:
 
 # 초기화 버튼
 if st.button("모의투자 초기화"):
-    st.session_state.cash = 100_000_000
+    st.session_state.cash = INITIAL_CASH
     st.session_state.holdings = {}
     st.session_state.trade_history = []
+    save_mock_data()
     st.success("모의투자 데이터가 초기화되었습니다.")
+    st.rerun()
