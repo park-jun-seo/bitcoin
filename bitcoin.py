@@ -205,4 +205,93 @@ with col_f2:
 with st.expander("📄 상세 데이터 확인 (최근 5개 봉)"):
     st.table(df.tail())
 
+# -----------------------------
+# 9. 현재 시장 상태 분석
+# -----------------------------
+st.markdown("---")
+st.subheader("🧠 현재 시장 상태 분석")
 
+# 최신 데이터 가져오기
+latest_rsi = df['RSI'].iloc[-1]
+
+ma_short = df['MA_S'].iloc[-1]
+ma_long = df['MA_L'].iloc[-1]
+
+latest_volume = df['volume'].iloc[-1]
+avg_volume = df['volume'].mean()
+
+latest_close = df['close'].iloc[-1]
+
+bb_upper = df['BB_H'].iloc[-1]
+bb_lower = df['BB_L'].iloc[-1]
+
+# -----------------------------
+# RSI 분석
+# -----------------------------
+if latest_rsi >= 70:
+    rsi_status = "과매수 상태"
+elif latest_rsi <= 30:
+    rsi_status = "과매도 상태"
+else:
+    rsi_status = "중립 상태"
+
+# -----------------------------
+# 이동평균선 분석
+# -----------------------------
+if ma_short > ma_long:
+    trend_status = "단기 상승 추세"
+else:
+    trend_status = "단기 하락 추세"
+
+# -----------------------------
+# 거래량 분석
+# -----------------------------
+if latest_volume > avg_volume * 1.5:
+    volume_status = "거래량 증가"
+else:
+    volume_status = "평균 거래량 수준"
+
+# -----------------------------
+# 볼린저 밴드 분석
+# -----------------------------
+if latest_close >= bb_upper:
+    bb_status = "볼린저밴드 상단 돌파 (과열 가능성)"
+elif latest_close <= bb_lower:
+    bb_status = "볼린저밴드 하단 이탈 (반등 가능성)"
+else:
+    bb_status = "볼린저밴드 내부 움직임"
+
+# -----------------------------
+# 종합 분석
+# -----------------------------
+if latest_rsi >= 70 and ma_short > ma_long:
+    final_status = "현재 상승 흐름이 강한 상태입니다."
+
+elif latest_rsi <= 30:
+    final_status = "과매도 구간으로 반등 가능성을 확인할 수 있습니다."
+
+elif ma_short > ma_long:
+    final_status = "현재 단기 상승 흐름이 유지되고 있습니다."
+
+else:
+    final_status = "현재 시장은 비교적 안정적인 흐름입니다."
+
+# -----------------------------
+# 출력
+# -----------------------------
+st.info(f"""
+📌 RSI 분석
+→ {rsi_status}
+
+📌 이동평균선 분석
+→ {trend_status}
+
+📌 거래량 분석
+→ {volume_status}
+
+📌 볼린저밴드 분석
+→ {bb_status}
+
+📌 종합 분석
+→ {final_status}
+""")
