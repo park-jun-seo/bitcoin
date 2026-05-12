@@ -19,7 +19,7 @@ st.set_page_config(
 st_autorefresh(interval=10000, key="refresh")
 
 # -----------------------------
-# 2. 사이드바 설정
+# 2. 사이드바 설정 (지표 변수 제거됨)
 # -----------------------------
 st.sidebar.title("🛠️ 설정")
 
@@ -47,25 +47,22 @@ interval = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📈 지표 변수")
-ma_short_val = st.sidebar.number_input("단기 이평선(MA)", value=5, min_value=1)
-ma_long_val = st.sidebar.number_input("장기 이평선(MA)", value=20, min_value=1)
-rsi_window = st.sidebar.number_input("RSI 기간", value=14, min_value=1)
-
-st.sidebar.markdown("---")
 st.sidebar.subheader("🚨 급등 탐지 조건 (24H 기준)")
 surge_price = st.sidebar.number_input("가격 상승률 기준 (%)", value=5.0, step=1.0, help="24시간 전 대비 현재가 상승률입니다.")
 
 # -----------------------------
-# 3. 데이터 로딩 및 지표 계산
+# 3. 데이터 로딩 및 지표 계산 (기본값 고정)
 # -----------------------------
 @st.cache_data(ttl=5)
 def get_coin_data(ticker, interval):
     df = pyupbit.get_ohlcv(ticker=ticker, interval=interval, count=100)
     if df is not None:
-        df['MA_S'] = df['close'].rolling(ma_short_val).mean()
-        df['MA_L'] = df['close'].rolling(ma_long_val).mean()
-        df['RSI'] = RSIIndicator(close=df['close'], window=rsi_window).rsi()
+        # 단기 이평선 5, 장기 이평선 20으로 고정
+        df['MA_S'] = df['close'].rolling(5).mean()
+        df['MA_L'] = df['close'].rolling(20).mean()
+        # RSI 14로 고정
+        df['RSI'] = RSIIndicator(close=df['close'], window=14).rsi()
+        # 볼린저 밴드 20, 2로 고정
         bb = BollingerBands(close=df['close'], window=20, window_dev=2)
         df['BB_H'] = bb.bollinger_hband()
         df['BB_L'] = bb.bollinger_lband()
@@ -100,8 +97,8 @@ fig = go.Figure()
 fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'], name='Candle'))
 fig.add_trace(go.Scatter(x=df.index, y=df['BB_H'], line=dict(color='rgba(173, 216, 230, 0.5)'), name='BB_Upper'))
 fig.add_trace(go.Scatter(x=df.index, y=df['BB_L'], line=dict(color='rgba(173, 216, 230, 0.5)'), fill='tonexty', name='BB_Lower'))
-fig.add_trace(go.Scatter(x=df.index, y=df['MA_S'], line=dict(color='orange', width=1), name=f'MA{ma_short_val}'))
-fig.add_trace(go.Scatter(x=df.index, y=df['MA_L'], line=dict(color='blue', width=1), name=f'MA{ma_long_val}'))
+fig.add_trace(go.Scatter(x=df.index, y=df['MA_S'], line=dict(color='orange', width=1), name='MA5'))
+fig.add_trace(go.Scatter(x=df.index, y=df['MA_L'], line=dict(color='blue', width=1), name='MA20'))
 fig.update_layout(height=500, xaxis_rangeslider_visible=False, margin=dict(l=10, r=10, t=10, b=10))
 st.plotly_chart(fig, use_container_width=True)
 
@@ -124,7 +121,7 @@ with col_c2:
     st.plotly_chart(rsi_fig, use_container_width=True)
 
 # -----------------------------
-# 7. 호가창 & 초고속 급등 탐지기 (NEW)
+# 7. 호가창 & 급등 탐지기
 # -----------------------------
 st.markdown("---")
 col_f1, col_f2 = st.columns([1, 2])
@@ -140,10 +137,10 @@ with col_f1:
         st.dataframe(ob_df, use_container_width=True, hide_index=True)
 
 with col_f2:
-    st.subheader("🚨 24H 급등 탐지기 (초고속)")
+    st.subheader("🚨 24H 급등 탐지기")
     st.markdown(f"**현재 설정:** 24시간 전 대비 가격 `{surge_price}%` 이상 상승")
     
-    if st.button("🚀 전체 마켓 즉시 스캔 (1초 컷!)", use_container_width=True):
+    if st.button("🚀 전체 마켓 즉시 스캔", use_container_width=True):
         all_tickers = list(coins_dict.values())
         
         # 110개 코인 티커를 쉼표(,)로 연결하여 한 번의 API 호출로 모두 가져옵니다.
@@ -179,7 +176,6 @@ with col_f2:
                 if not surge_df.empty:
                     st.success(f"🚨 {len(surge_df)}개의 급등 코인 발견!")
                     surge_df = surge_df.sort_values("상승률(%)", ascending=False)
-                    # 거래대금 포맷팅 등 깔끔하게 출력
                     st.dataframe(surge_df.style.format({"상승률(%)": "{:.2f}%", "현재가(원)": "{:,.0f}", "24H거래대금(백만)": "{:,.0f}"}), use_container_width=True, hide_index=True)
                 else:
                     st.info(f"현재 가격이 {surge_price}% 이상 상승한 코인이 없습니다.")
