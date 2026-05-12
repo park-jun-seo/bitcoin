@@ -212,7 +212,12 @@ coin_amount = st.session_state.holdings.get(ticker, 0)
 coin_value = coin_amount * current_price
 total_asset = st.session_state.cash + coin_value
 
-col1, col2, col3 = st.columns(3)
+# 수익/손실 계산
+initial_cash = 10_000_000
+profit_loss = total_asset - initial_cash
+profit_rate = (profit_loss / initial_cash) * 100
+
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.metric("보유 현금", f"{st.session_state.cash:,.0f} 원")
@@ -221,8 +226,18 @@ with col2:
     st.metric(f"{selected_korean_name} 보유 수량", f"{coin_amount:.6f} 개")
 
 with col3:
-    st.metric("총 평가 자산", f"{total_asset:,.0f} 원")
+    st.metric(
+        "총 평가 자산",
+        f"{total_asset:,.0f} 원",
+        f"{profit_loss:,.0f} 원"
+    )
 
+with col4:
+    st.metric(
+        "수익률",
+        f"{profit_rate:.2f}%",
+        f"{profit_loss:,.0f} 원"
+    )
 st.markdown("### 🛒 매수 / 매도")
 
 col_buy, col_sell = st.columns(2)
