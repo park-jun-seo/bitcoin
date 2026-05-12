@@ -233,9 +233,21 @@ if "cash" not in st.session_state:
 # 현재 선택 코인 보유 수량
 coin_amount = st.session_state.holdings.get(ticker, 0)
 
-# 평가금액 계산
-coin_value = coin_amount * current_price
-total_asset = st.session_state.cash + coin_value
+# 전체 보유 코인 평가금액 계산
+total_coin_value = 0
+
+for hold_ticker, hold_amount in st.session_state.holdings.items():
+    try:
+        hold_price = pyupbit.get_current_price(hold_ticker)
+
+        if hold_price is not None:
+            total_coin_value += hold_amount * hold_price
+
+    except:
+        pass
+
+# 총 평가 자산 = 보유 현금 + 전체 코인 평가금액
+total_asset = st.session_state.cash + total_coin_value
 
 # 수익/손실 계산
 profit_loss = total_asset - INITIAL_CASH
