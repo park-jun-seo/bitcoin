@@ -19,7 +19,7 @@ st.set_page_config(
 st_autorefresh(interval=10000, key="refresh")
 
 # -----------------------------
-# 2. 사이드바 설정 (한글/영문 검색 가능)
+# 2. 사이드바 설정
 # -----------------------------
 st.sidebar.title("🛠️ 설정")
 
@@ -27,52 +27,34 @@ st.sidebar.title("🛠️ 설정")
 def get_krw_coin_dict():
     url = "https://api.upbit.com/v1/market/all?isDetails=false"
     headers = {"accept": "application/json"}
-
     try:
         response = requests.get(url, headers=headers)
         data = response.json()
-
-        coin_dict = {
-            f"{item['korean_name']} ({item['market']})": item['market']
-            for item in data
-            if item['market'].startswith("KRW-")
-        }
-
-        return coin_dict
-
+        return {f"{item['korean_name']} ({item['market']})": item['market'] for item in data if item['market'].startswith("KRW-")}
     except:
-        return {
-            "비트코인 (KRW-BTC)": "KRW-BTC",
-            "이더리움 (KRW-ETH)": "KRW-ETH"
-        }
+        return {"비트코인 (KRW-BTC)": "KRW-BTC"}
 
 coins_dict = get_krw_coin_dict()
 
-search_word = st.sidebar.text_input(
-    "🔍 코인 검색",
-    placeholder="예: 비트코인, BTC, 리플, XRP"
-)
-
-if search_word:
-    filtered_coins = {
-        name: ticker
-        for name, ticker in coins_dict.items()
-        if search_word.lower() in name.lower() or search_word.lower() in ticker.lower()
-    }
-else:
-    filtered_coins = coins_dict
-
-if len(filtered_coins) == 0:
-    st.sidebar.warning("검색 결과가 없습니다.")
-    st.stop()
-
-selected_display_name = st.sidebar.selectbox(
-    "코인 선택",
-    list(filtered_coins.keys())
-)
-
-ticker = filtered_coins[selected_display_name]
+selected_display_name = st.sidebar.selectbox("🔍 코인 검색 및 선택", list(coins_dict.keys()))
+ticker = coins_dict[selected_display_name]
 selected_korean_name = selected_display_name.split(" ")[0]
+
+interval = st.sidebar.selectbox(
+    "차트 주기(분봉/일봉)",
+    ["minute1", "minute5", "minute15", "minute60", "day"],
+    index=1
+)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📈 지표 변수")
+ma_short_val = st.sidebar.number_input("단기 이평선(MA)", value=5, min_value=1)
+ma_long_val = st.sidebar.number_input("장기 이평선(MA)", value=20, min_value=1)
+rsi_window = st.sidebar.number_input("RSI 기간", value=14, min_value=1)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🚨 급등 탐지 조건 (24H 기준)")
+surge_price = st.sidebar.number_input("가격 상승률 기준 (%)", value=5.0, step=1.0, help="24시간 전 대비 현재가 상승률입니다.")
 
 # -----------------------------
 # 3. 데이터 로딩 및 지표 계산
@@ -210,3 +192,94 @@ with col_f2:
 # -----------------------------
 with st.expander("📄 상세 데이터 확인 (최근 5개 봉)"):
     st.table(df.tail())
+
+# -----------------------------
+# 9. 현재 시장 상태 분석
+# -----------------------------
+st.markdown("---")
+st.subheader("🧠 현재 시장 상태 분석")
+
+# 최신 데이터 가져오기
+latest_rsi = df['RSI'].iloc[-1]
+
+ma_short = df['MA_S'].iloc[-1]
+ma_long = df['MA_L'].iloc[-1]
+
+latest_volume = df['volume'].iloc[-1]
+avg_volume = df['volume'].mean()
+
+latest_close = df['close'].iloc[-1]
+
+bb_upper = df['BB_H'].iloc[-1]
+bb_lower = df['BB_L'].iloc[-1]
+
+# -----------------------------
+# RSI 분석
+# -----------------------------
+if latest_rsi >= 70:
+    rsi_status = "과매수 상태"
+elif latest_rsi <= 30:
+    rsi_status = "과매도 상태"
+else:
+    rsi_status = "중립 상태"
+
+# -----------------------------
+# 이동평균선 분석
+# -----------------------------
+if ma_short > ma_long:
+    trend_status = "단기 상승 추세"
+else:
+    trend_status = "단기 하락 추세"
+
+# -----------------------------
+# 거래량 분석
+# -----------------------------
+if latest_volume > avg_volume * 1.5:
+    volume_status = "거래량 증가"
+else:
+    volume_status = "평균 거래량 수준"
+
+# -----------------------------
+# 볼린저 밴드 분석
+# -----------------------------
+if latest_close >= bb_upper:
+    bb_status = "볼린저밴드 상단 돌파 (과열 가능성)"
+elif latest_close <= bb_lower:
+    bb_status = "볼린저밴드 하단 이탈 (반등 가능성)"
+else:
+    bb_status = "볼린저밴드 내부 움직임"
+
+# -----------------------------
+# 종합 분석
+# -----------------------------
+if latest_rsi >= 70 and ma_short > ma_long:
+    final_status = "현재 상승 흐름이 강한 상태입니다."
+
+elif latest_rsi <= 30:
+    final_status = "과매도 구간으로 반등 가능성을 확인할 수 있습니다."
+
+elif ma_short > ma_long:
+    final_status = "현재 단기 상승 흐름이 유지되고 있습니다."
+
+else:
+    final_status = "현재 시장은 비교적 안정적인 흐름입니다."
+
+# -----------------------------
+# 출력
+# -----------------------------
+st.info(f"""
+📌 RSI 분석
+→ {rsi_status}
+
+📌 이동평균선 분석
+→ {trend_status}
+
+📌 거래량 분석
+→ {volume_status}
+
+📌 볼린저밴드 분석
+→ {bb_status}
+
+📌 종합 분석
+→ {final_status}
+""")
