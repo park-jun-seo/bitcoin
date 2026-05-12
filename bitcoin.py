@@ -194,92 +194,123 @@ with st.expander("📄 상세 데이터 확인 (최근 5개 봉)"):
     st.table(df.tail())
 
 # -----------------------------
-# 9. 현재 시장 상태 분석
+# 9. 가상화폐 모의투자
 # -----------------------------
 st.markdown("---")
-st.subheader("🧠 현재 시장 상태 분석")
+st.subheader("💰 가상화폐 모의투자")
 
-# 최신 데이터 가져오기
-latest_rsi = df['RSI'].iloc[-1]
+# 초기값 설정
+if "cash" not in st.session_state:
+    st.session_state.cash = 10_000_000   # 초기 자금 1천만 원
 
-ma_short = df['MA_S'].iloc[-1]
-ma_long = df['MA_L'].iloc[-1]
+if "holdings" not in st.session_state:
+    st.session_state.holdings = {}
 
-latest_volume = df['volume'].iloc[-1]
-avg_volume = df['volume'].mean()
+if "trade_history" not in st.session_state:
+    st.session_state.trade_history = []
 
-latest_close = df['close'].iloc[-1]
+# 현재 선택 코인 보유 수량
+coin_amount = st.session_state.holdings.get(ticker, 0)
 
-bb_upper = df['BB_H'].iloc[-1]
-bb_lower = df['BB_L'].iloc[-1]
+# 평가금액 계산
+coin_value = coin_amount * current_price
+total_asset = st.session_state.cash + coin_value
 
-# -----------------------------
-# RSI 분석
-# -----------------------------
-if latest_rsi >= 70:
-    rsi_status = "과매수 상태"
-elif latest_rsi <= 30:
-    rsi_status = "과매도 상태"
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("보유 현금", f"{st.session_state.cash:,.0f} 원")
+
+with col2:
+    st.metric(f"{selected_korean_name} 보유 수량", f"{coin_amount:.6f} 개")
+
+with col3:
+    st.metric("총 평가 자산", f"{total_asset:,.0f} 원")
+
+st.markdown("### 🛒 매수 / 매도")
+
+col_buy, col_sell = st.columns(2)
+
+# 매수
+with col_buy:
+    st.markdown("#### 매수")
+    buy_money = st.number_input(
+        "매수 금액 입력",
+        min_value=0,
+        step=10000,
+        key="buy_money"
+    )
+
+    if st.button("매수하기"):
+        if buy_money <= 0:
+            st.warning("매수 금액을 입력하세요.")
+
+        elif buy_money > st.session_state.cash:
+            st.error("보유 현금이 부족합니다.")
+
+        else:
+            buy_amount = buy_money / current_price
+
+            st.session_state.cash -= buy_money
+            st.session_state.holdings[ticker] = coin_amount + buy_amount
+
+            st.session_state.trade_history.append({
+                "구분": "매수",
+                "코인": selected_korean_name,
+                "티커": ticker,
+                "가격": current_price,
+                "금액": buy_money,
+                "수량": buy_amount
+            })
+
+            st.success(f"{selected_korean_name} {buy_amount:.6f}개 매수 완료")
+
+# 매도
+with col_sell:
+    st.markdown("#### 매도")
+    sell_amount = st.number_input(
+        "매도 수량 입력",
+        min_value=0.0,
+        step=0.0001,
+        key="sell_amount"
+    )
+
+    if st.button("매도하기"):
+        if sell_amount <= 0:
+            st.warning("매도 수량을 입력하세요.")
+
+        elif sell_amount > coin_amount:
+            st.error("보유 수량이 부족합니다.")
+
+        else:
+            sell_money = sell_amount * current_price
+
+            st.session_state.cash += sell_money
+            st.session_state.holdings[ticker] = coin_amount - sell_amount
+
+            st.session_state.trade_history.append({
+                "구분": "매도",
+                "코인": selected_korean_name,
+                "티커": ticker,
+                "가격": current_price,
+                "금액": sell_money,
+                "수량": sell_amount
+            })
+
+            st.success(f"{selected_korean_name} {sell_amount:.6f}개 매도 완료")
+
+# 거래 내역
+st.markdown("### 📄 거래 내역")
+
+if st.session_state.trade_history:
+    history_df = pd.DataFrame(st.session_state.trade_history)
+    st.dataframe(history_df, use_container_width=True, hide_index=True)
 else:
-    rsi_status = "중립 상태"
+    st.info("아직 거래 내역이 없습니다.")
 
-# -----------------------------
-# 이동평균선 분석
-# -----------------------------
-if ma_short > ma_long:
-    trend_status = "단기 상승 추세"
-else:
-    trend_status = "단기 하락 추세"
-
-# -----------------------------
-# 거래량 분석
-# -----------------------------
-if latest_volume > avg_volume * 1.5:
-    volume_status = "거래량 증가"
-else:
-    volume_status = "평균 거래량 수준"
-
-# -----------------------------
-# 볼린저 밴드 분석
-# -----------------------------
-if latest_close >= bb_upper:
-    bb_status = "볼린저밴드 상단 돌파 (과열 가능성)"
-elif latest_close <= bb_lower:
-    bb_status = "볼린저밴드 하단 이탈 (반등 가능성)"
-else:
-    bb_status = "볼린저밴드 내부 움직임"
-
-# -----------------------------
-# 종합 분석
-# -----------------------------
-if latest_rsi >= 70 and ma_short > ma_long:
-    final_status = "현재 상승 흐름이 강한 상태입니다."
-
-elif latest_rsi <= 30:
-    final_status = "과매도 구간으로 반등 가능성을 확인할 수 있습니다."
-
-elif ma_short > ma_long:
-    final_status = "현재 단기 상승 흐름이 유지되고 있습니다."
-
-else:
-    final_status = "현재 시장은 비교적 안정적인 흐름입니다."
-
-# -----------------------------
-# 출력
-# -----------------------------
-st.info(f"""
-📌 RSI 분석
-→ {rsi_status}
-
-📌 이동평균선 분석
-→ {trend_status}
-
-📌 거래량 분석
-→ {volume_status}
-
-📌 볼린저밴드 분석
-→ {bb_status}
-
-📌 종합 분석
-→ {final_status}
-""")
+# 초기화 버튼
+if st.button("모의투자 초기화"):
+    st.session_state.cash = 10_000_000
+    st.session_state.holdings = {}
+    st.session_state.trade_history = []
+    st.success("모의투자 데이터가 초기화되었습니다.")
