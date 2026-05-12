@@ -5,7 +5,6 @@ import plotly.graph_objects as go
 from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 from streamlit_autorefresh import st_autorefresh
-import time
 import requests
 
 # -----------------------------
@@ -16,8 +15,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 기본 차트 및 현재가 새로고침 (10초)
-# (급등 스캔은 이제 버튼 수동 클릭이므로 자동 새로고침 주기를 줄여도 안전합니다)
+# 기본 차트 새로고침 (10초)
 st_autorefresh(interval=10000, key="refresh")
 
 # -----------------------------
@@ -54,12 +52,9 @@ ma_short_val = st.sidebar.number_input("단기 이평선(MA)", value=5, min_valu
 ma_long_val = st.sidebar.number_input("장기 이평선(MA)", value=20, min_value=1)
 rsi_window = st.sidebar.number_input("RSI 기간", value=14, min_value=1)
 
-# [NEW] 급등 탐지 조건 커스텀 설정
 st.sidebar.markdown("---")
-st.sidebar.subheader("🚨 급등 탐지 조건 (전일 대비)")
-surge_price = st.sidebar.number_input("가격 상승률 기준 (%)", value=5.0, step=1.0)
-surge_vol = st.sidebar.number_input("거래량 증가율 기준 (%)", value=20.0, step=5.0)
-surge_logic = st.sidebar.radio("조건 결합 방식", ["둘 중 하나라도 (OR)", "둘 다 만족해야 (AND)"])
+st.sidebar.subheader("🚨 급등 탐지 조건 (24H 기준)")
+surge_price = st.sidebar.number_input("가격 상승률 기준 (%)", value=5.0, step=1.0, help="24시간 전 대비 현재가 상승률입니다.")
 
 # -----------------------------
 # 3. 데이터 로딩 및 지표 계산
@@ -129,7 +124,7 @@ with col_c2:
     st.plotly_chart(rsi_fig, use_container_width=True)
 
 # -----------------------------
-# 7. 호가창 & 수동 급등 탐지 (수정됨)
+# 7. 호가창 & 초고속 급등 탐지기 (NEW)
 # -----------------------------
 st.markdown("---")
 col_f1, col_f2 = st.columns([1, 2])
@@ -145,77 +140,52 @@ with col_f1:
         st.dataframe(ob_df, use_container_width=True, hide_index=True)
 
 with col_f2:
-    st.subheader("🚨 전일 대비 급등 탐지기")
-    st.markdown(f"**현재 설정:** 가격 `{surge_price}%` 이상 상승 **{surge_logic.split(' ')[0]}** 거래량 `{surge_vol}%` 이상 증가")
+    st.subheader("🚨 24H 급등 탐지기 (초고속)")
+    st.markdown(f"**현재 설정:** 24시간 전 대비 가격 `{surge_price}%` 이상 상승")
     
-    # 버튼을 누를 때만 스캔이 작동하도록 변경 (UI 정지 현상 완벽 해결)
-    if st.button("🚀 전체 마켓 스캔 시작 (약 15초 소요)", use_container_width=True):
+    if st.button("🚀 전체 마켓 즉시 스캔 (1초 컷!)", use_container_width=True):
         all_tickers = list(coins_dict.values())
-        surge_list = []
         
-        # 진행률을 보여주는 UI
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+        # 110개 코인 티커를 쉼표(,)로 연결하여 한 번의 API 호출로 모두 가져옵니다.
+        markets_str = ",".join(all_tickers)
+        url = f"https://api.upbit.com/v1/ticker?markets={markets_str}"
+        headers = {"accept": "application/json"}
         
-        for i, coin_ticker in enumerate(all_tickers):
+        with st.spinner("데이터 불러오는 중..."):
             try:
-                # interval="day" 로 전일과 금일 데이터 2개 추출
-                temp_df = pyupbit.get_ohlcv(coin_ticker, interval="day", count=2)
+                response = requests.get(url, headers=headers)
+                data = response.json()
                 
-                if temp_df is not None and len(temp_df) >= 2:
-                    prev_day = temp_df.iloc[0] # 전일 데이터
-                    curr_day = temp_df.iloc[1] # 금일 (현재) 데이터
+                surge_list = []
+                for item in data:
+                    # signed_change_rate는 소수점으로 나옴 (예: 0.05 = 5%)
+                    change_pct = item['signed_change_rate'] * 100
                     
-                    # 1. 가격 상승률 계산 (%)
-                    price_change = ((curr_day['close'] - prev_day['close']) / prev_day['close']) * 100
-                    
-                    # 2. 거래량 증가율 계산 (%)
-                    if prev_day['volume'] > 0:
-                        vol_change = ((curr_day['volume'] - prev_day['volume']) / prev_day['volume']) * 100
-                    else:
-                        vol_change = 0
-                    
-                    # 3. 사이드바 조건 체크
-                    condition_met = False
-                    if "OR" in surge_logic:
-                        if price_change >= surge_price or vol_change >= surge_vol:
-                            condition_met = True
-                    else: # AND 조건
-                        if price_change >= surge_price and vol_change >= surge_vol:
-                            condition_met = True
-                            
-                    # 조건에 맞으면 리스트에 추가
-                    if condition_met:
+                    if change_pct >= surge_price:
+                        # 딕셔너리에서 한글 이름 역추적
+                        coin_ticker = item['market']
                         k_names = [k for k, v in coins_dict.items() if v == coin_ticker]
                         k_name = k_names[0].split(" ")[0] if k_names else coin_ticker
                         
                         surge_list.append({
                             "코인": k_name,
-                            "가격상승(%)": round(price_change, 2),
-                            "거래량증가(%)": round(vol_change, 2),
-                            "현재가(원)": curr_day['close']
+                            "상승률(%)": round(change_pct, 2),
+                            "현재가(원)": item['trade_price'],
+                            "24H거래대금(백만)": int(item['acc_trade_price_24h'] / 1000000)
                         })
+                        
+                surge_df = pd.DataFrame(surge_list)
+                
+                if not surge_df.empty:
+                    st.success(f"🚨 {len(surge_df)}개의 급등 코인 발견!")
+                    surge_df = surge_df.sort_values("상승률(%)", ascending=False)
+                    # 거래대금 포맷팅 등 깔끔하게 출력
+                    st.dataframe(surge_df.style.format({"상승률(%)": "{:.2f}%", "현재가(원)": "{:,.0f}", "24H거래대금(백만)": "{:,.0f}"}), use_container_width=True, hide_index=True)
+                else:
+                    st.info(f"현재 가격이 {surge_price}% 이상 상승한 코인이 없습니다.")
+                    
             except Exception as e:
-                pass
-            
-            # 로딩바 업데이트 및 API 차단(IP 밴) 방지 딜레이
-            progress_bar.progress((i + 1) / len(all_tickers))
-            status_text.text(f"스캔 진행 중... ({i+1}/{len(all_tickers)})")
-            time.sleep(0.12) 
-            
-        # 스캔 완료 후 로딩바 지우기
-        progress_bar.empty()
-        status_text.empty()
-        
-        # 결과 출력
-        surge_df = pd.DataFrame(surge_list)
-        if not surge_df.empty:
-            st.success(f"🚨 {len(surge_df)}개의 급등 코인 발견!")
-            # 가격 상승률 기준으로 내림차순 정렬
-            surge_df = surge_df.sort_values("가격상승(%)", ascending=False)
-            st.dataframe(surge_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("현재 설정한 조건에 만족하는 코인이 없습니다.")
+                st.error("업비트 서버에서 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.")
 
 # -----------------------------
 # 8. 최근 데이터 테이블
