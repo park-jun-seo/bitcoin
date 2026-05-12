@@ -19,7 +19,7 @@ st.set_page_config(
 st_autorefresh(interval=10000, key="refresh")
 
 # -----------------------------
-# 2. 사이드바 설정
+# 2. 사이드바 설정 (한글/영문 검색 가능)
 # -----------------------------
 st.sidebar.title("🛠️ 설정")
 
@@ -27,34 +27,52 @@ st.sidebar.title("🛠️ 설정")
 def get_krw_coin_dict():
     url = "https://api.upbit.com/v1/market/all?isDetails=false"
     headers = {"accept": "application/json"}
+
     try:
         response = requests.get(url, headers=headers)
         data = response.json()
-        return {f"{item['korean_name']} ({item['market']})": item['market'] for item in data if item['market'].startswith("KRW-")}
+
+        coin_dict = {
+            f"{item['korean_name']} ({item['market']})": item['market']
+            for item in data
+            if item['market'].startswith("KRW-")
+        }
+
+        return coin_dict
+
     except:
-        return {"비트코인 (KRW-BTC)": "KRW-BTC"}
+        return {
+            "비트코인 (KRW-BTC)": "KRW-BTC",
+            "이더리움 (KRW-ETH)": "KRW-ETH"
+        }
 
 coins_dict = get_krw_coin_dict()
 
-selected_display_name = st.sidebar.selectbox("🔍 코인 검색 및 선택", list(coins_dict.keys()))
-ticker = coins_dict[selected_display_name]
-selected_korean_name = selected_display_name.split(" ")[0]
-
-interval = st.sidebar.selectbox(
-    "차트 주기(분봉/일봉)",
-    ["minute1", "minute5", "minute15", "minute60", "day"],
-    index=1
+search_word = st.sidebar.text_input(
+    "🔍 코인 검색",
+    placeholder="예: 비트코인, BTC, 리플, XRP"
 )
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("📈 지표 변수")
-ma_short_val = st.sidebar.number_input("단기 이평선(MA)", value=5, min_value=1)
-ma_long_val = st.sidebar.number_input("장기 이평선(MA)", value=20, min_value=1)
-rsi_window = st.sidebar.number_input("RSI 기간", value=14, min_value=1)
+if search_word:
+    filtered_coins = {
+        name: ticker
+        for name, ticker in coins_dict.items()
+        if search_word.lower() in name.lower() or search_word.lower() in ticker.lower()
+    }
+else:
+    filtered_coins = coins_dict
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("🚨 급등 탐지 조건 (24H 기준)")
-surge_price = st.sidebar.number_input("가격 상승률 기준 (%)", value=5.0, step=1.0, help="24시간 전 대비 현재가 상승률입니다.")
+if len(filtered_coins) == 0:
+    st.sidebar.warning("검색 결과가 없습니다.")
+    st.stop()
+
+selected_display_name = st.sidebar.selectbox(
+    "코인 선택",
+    list(filtered_coins.keys())
+)
+
+ticker = filtered_coins[selected_display_name]
+selected_korean_name = selected_display_name.split(" ")[0]
 
 # -----------------------------
 # 3. 데이터 로딩 및 지표 계산
